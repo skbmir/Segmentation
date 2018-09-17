@@ -14,12 +14,12 @@ SEED = 42
 def make_data(path):
     data = np.empty((50, IMG_HEIGHT, IMG_WIDTH, 3), dtype='float32')
     image = cv2.imread(path)
+    image = image[80:720, 0:1280]
     height, width, depth = image.shape
-    steps_h = math.floor((height / IMG_HEIGHT))
+    steps_h = round((height / IMG_HEIGHT))
     minus_h = round((height - steps_h * IMG_HEIGHT) / steps_h)
     steps_w = math.floor((width / IMG_WIDTH))
     minus_w = round((width - steps_w * IMG_WIDTH) / steps_w)
-
     y = 0
     x = 0
     cnt = 0
@@ -39,29 +39,43 @@ def make_data(path):
 def argparser():
     ap = argparse.ArgumentParser()
     ap.add_argument('--path', help='Path for dir with color labels')
-    args = vars(ap.parse_args())
+    ap.add_argument('--model', help='Path for model JSON')
+    ap.add_argument('--weight', help='Path for weights')
+    args = ap.parse_args()
     return args
 
 
 if __name__ == '__main__':
     exargs = argparser()
-    x_data = make_data(exargs['path'])
-    modelJson = open('unet_on_bdd.json', 'r')
+
+    im = cv2.imread(exargs.path, cv2.IMREAD_UNCHANGED).astype("int16").astype('float32')
+    cv2.imshow('test', im)
+
+    im = cv2.resize(im, dsize=(IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
+
+    im = (im - np.min(im)) / (np.max(im) - np.min(im))
+
+    original = cv2.imread(exargs.path)
+    cv2.imshow('original', original)
+    x_data = make_data(exargs.path)
+    modelJson = open(exargs.model, 'r')
     loadedModelJson = modelJson.read()
     modelJson.close()
     loadedModelJson = model_from_json(loadedModelJson)
-    loadedModelJson.load_weights('unet_on_bdd.h5')
+    loadedModelJson.load_weights(exargs.weight)
     loadedModelJson.compile(optimizer=Adam(2e-4), loss='binary_crossentropy', metrics=['accuracy'])
-    das = np.empty((5, 128, 1280, 3), dtype='uint8')
+    das = np.empty((5, 128, 1280), dtype='uint8')
     cnts = 0
     for i, image in enumerate(x_data):
         result = loadedModelJson.predict(image.reshape(1, IMG_HEIGHT, IMG_WIDTH, 3))
         res = result[0, :, :, 0]
-        res = cv2.cvtColor(res, cv2.COLOR_GRAY2BGR)
-        if i == 0 or i == 10 or i == 20 or i == 30 or i == 40:
+        res = (res - np.min(res)) / (np.max(res) - np.min(res))
+        if i == 0 or i == 10 or i == 20 or i == 30 or i == 40 or i == 50:
             old = res
-        elif i == 9 or i == 19 or i == 29 or i == 39 or i == 49:
+        elif i == 9 or i == 19 or i == 29 or i == 39 or i == 49 or i == 59:
             data = np.hstack((old, res))
+            # print(data.shape)
+            # data = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
             das[cnts] = data
             cv2.imshow(str(i), data)
             cnts += 1
